@@ -1,0 +1,12 @@
+.idea
+.DS_Store
+.project
+target
+*.via
+*.tmp
+*.err
+*.log
+*.log.*
+*.iml
+*.file
+main.go

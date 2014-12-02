@@ -71,7 +71,7 @@ func (self *Pipa) Connect() (stop chan bool) {
 
 
 func (self *Pipa) ConnectPipe(input chan interface{}) (output chan interface{}) {
-	output = make(chan interface{})
+	//implements by subclass
 	return
 }
 

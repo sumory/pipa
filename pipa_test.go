@@ -48,7 +48,7 @@ type SampleSink struct {
 	items  int
 	stop   chan bool
 	input  chan interface{}
-	msg interface{}
+	msg    interface{}
 }
 
 func NewSampleSink() (ns *SampleSink) {
@@ -68,7 +68,7 @@ func (self *SampleSink) Run() {
 			stuff := <-self.input
 			if stuff == nil {
 				break
-			}else{
+			}else {
 				self.msg = stuff
 			}
 			self.items++
@@ -128,24 +128,24 @@ func (p *SamplePipe) ConnectPipe(input chan interface{}) (output chan interface{
 
 func TestPipa(t *testing.T) {
 	Convey("test pipa", t, func() {
-			content := "hello pipa!"
-			count := 100
-			pl := NewPipa()
+		content := "hello pipa!"
+		count := 100
+		pl := NewPipa()
 
-			source := NewSampleSource(content, count)
-			pl.AddSource(source)
+		source := NewSampleSource(content, count)
+		pl.AddSource(source)
 
-			sink := NewSampleSink()
-			pl.AddSink(sink)
+		sink := NewSampleSink()
+		pl.AddSink(sink)
 
-			pl.AddPipe(NewSamplePipe())
-			pl.AddPipe(NewSamplePipe())
+		pl.AddPipe(NewSamplePipe())
+		pl.AddPipe(NewSamplePipe())
 
-			stop := pl.Connect()//all 3 parts Connect*
-			pl.Run()// all 3 parts start
-			<-stop
+		stop := pl.Connect()//all 3 parts Connect*
+		pl.Run()// all 3 parts start
+		<-stop
 
-			So(sink.items, ShouldEqual, count)
-			So(sink.msg,ShouldEqual, content)
-		})
+		So(sink.items, ShouldEqual, count)
+		So(sink.msg, ShouldEqual, content)
+	})
 }

@@ -9,4 +9,5 @@ target
 *.log.*
 *.iml
 *.file
+*.file.*
 main.go

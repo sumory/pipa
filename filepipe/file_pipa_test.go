@@ -6,21 +6,21 @@ import (
 	"io"
 	"os"
 	"bufio"
-"fmt"
+	"fmt"
 	"testing"
 )
 
 // Source
 type FileSource struct {
 	filename string
-	size   int64
+	size     int64
 	reader *bufio.Reader
-	status int
-	input  chan interface{}
-	output chan interface{}
+	status   int
+	input    chan interface{}
+	output   chan interface{}
 }
 
-func NewFileSource(filename string)  (*FileSource){
+func NewFileSource(filename string) (*FileSource) {
 	source := &FileSource{}
 	source.status = WAITING
 	source.filename = filename
@@ -31,42 +31,38 @@ func (self *FileSource) Status() int {
 	return self.status
 }
 
-func (self *FileSource) Run() error{
-	fmt.Println("------------------>",self.filename)
-	f, err := os.OpenFile(self.filename, os.O_RDONLY, 0660)
-	defer f.Close()
-	if err != nil {
-		return  err
-	}
-	var n int64
-	if fi, err := f.Stat(); err == nil {
-		if size := fi.Size(); size < 1e9 {
-			n = size
-		}else{
-			//should return error
-		}
-	}
-	self.size = n
-	reader := bufio.NewReader(f)
-	self.status = RUNNING
-	buf := make([]byte, 1024)
+func (self *FileSource) Run() {
 	go func() {
-
-		for  {
-			n,err := reader.Read(buf)
+		f, err := os.OpenFile(self.filename, os.O_RDONLY, 0660)
+		defer f.Close()
+		if err != nil {
+			panic(err)
+		}
+		var n int64
+		if fi, err := f.Stat(); err == nil {
+			if size := fi.Size(); size < 1e9 {
+				n = size
+			}else {
+				//should return error
+			}
+		}
+		self.size = n
+		self.reader = bufio.NewReader(f)
+		self.status = RUNNING
+		buf := make([]byte, 10)
+		for {
+			m, err := self.reader.Read(buf)
 			if err != nil && err != io.EOF {panic(err)}
-			fmt.Println("n -->", n)
-			if 0==n{
+			fmt.Println("read m -->", m)
+			if 0 == m {
 				self.output <- nil
 				break
-			} else{
-				self.output <- buf[:n]
+			} else {
+				self.output <- buf[:m]
 			}
 		}
 		close(self.output)
 	}()
-
-	return nil
 }
 
 func (self *FileSource) ConnectSource() (output chan interface{}, err error) {
@@ -83,7 +79,7 @@ type FileSink struct {
 	input  chan interface{}
 }
 
-func NewFileSink()  *FileSink {
+func NewFileSink() *FileSink {
 	sink := &FileSink{}
 	sink.status = WAITING
 	return sink
@@ -93,17 +89,19 @@ func (self *FileSink) Status() int {
 	return self.status
 }
 
-func (self *FileSink) Run() error{
-	f, err :=os.OpenFile("10mb.file.sink", os.O_WRONLY, 0660)
-	defer f.Close()
-	if err != nil {
-		return err
-	}
+func (self *FileSink) Run() {
 
-	self.writer = bufio.NewWriter(f)
 	go func() {
+		f, err := os.OpenFile("10mb.file.sink", os.O_CREATE|os.O_WRONLY, 0660)
+		defer f.Close()
+		if err != nil {
+			panic(err)
+		}
+
+		self.writer = bufio.NewWriter(f)
 		for {
 			content := <-self.input
+			fmt.Println("sink:", content)
 			if content == nil {
 				break
 			} else {//write to file
@@ -114,7 +112,6 @@ func (self *FileSink) Run() error{
 		close(self.stop)
 	}()
 	self.status = RUNNING
-	return nil
 }
 
 func (self *FileSink) ConnectSink(input chan interface{}) (stop chan bool, err error) {
@@ -140,10 +137,11 @@ func (p *FilePipe) Status() int {
 	return p.status
 }
 
-func (p *FilePipe) Run() error{
+func (p *FilePipe) Run() {
 	go func() {
 		for {
 			stuff, ok := <-p.input
+			fmt.Println("pile:", stuff)
 			if !ok {
 				break
 			}
@@ -152,7 +150,6 @@ func (p *FilePipe) Run() error{
 		close(p.output)
 	}()
 	p.status = RUNNING
-	return nil
 }
 
 func (p *FilePipe) ConnectPipe(input chan interface{}) (output chan interface{}, err error) {
@@ -164,20 +161,42 @@ func (p *FilePipe) ConnectPipe(input chan interface{}) (output chan interface{},
 
 func TestFilePipa(t *testing.T) {
 	Convey("test file pipa", t, func() {
-		pp := NewPipa()
+			pp := NewPipa()
 
-		source := NewFileSource("/data/go/src/github.com/sumory/pipa/filepipe/10mb.file")
-		pp.AddSource(source)
+			source := NewFileSource("/data/go/src/github.com/sumory/pipa/filepipe/10mb.file")
+			pp.AddSource(source)
 
-		sink := NewFileSink()
-		pp.AddSink(sink)
+			sink := NewFileSink()
+			pp.AddSink(sink)
 
-		pp.AddPipe(NewFilePipe())
+			pp.AddPipe(NewFilePipe())
 
-		stop := pp.Connect() //all 3 parts Connect*
-		pp.Run()             // all 3 parts start
-		<-stop
+			stop := pp.Connect() //all 3 parts Connect*
+			pp.Run()             // all 3 parts start
+			<-stop
 
 
-	})
+		})
 }
+
+//func TestFileSource(t *testing.T) {
+//	Convey("test file source", t, func() {
+//			source := NewFileSource("/data/go/src/lincell4go/test/test.txt")
+//			outchan, err := source.ConnectSource()
+//			if err != nil {
+//				t.Log("connect source error", err)
+//			}else {
+//				source.Run()
+//			}
+//
+//			result := make([]byte, 1024, 1024)
+//			for e := range outchan {
+//				if e == nil{break}
+//				tmp := e.([]byte)
+//				result = append(result, tmp[:]...)
+//
+//			}
+//
+//			t.Log("文件内容为：",string(result))
+//		})
+//}

@@ -12,7 +12,7 @@ const (
 )
 
 type Runable interface {
-	Run() error
+	Run()
 	Status() int
 }
 

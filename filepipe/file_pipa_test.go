@@ -2,13 +2,75 @@ package filepipe
 
 import (
 	. "github.com/smartystreets/goconvey/convey"
-
+	"crypto/md5"
 	"io"
 	"os"
 	"bufio"
 	"fmt"
+	"time"
 	"testing"
+
 )
+
+func IsBigEndian() bool {
+	var i int32 = 0x12345678
+	var b byte = byte(i)
+	if b == 0x12 {
+		return true
+	}
+	return false
+}
+
+func Now() string {
+	return time.Now().Format("2006-01-02 15:04:05")
+}
+
+func getFileInfo(filename string) Header {
+	fi, err := os.Lstat(filename)
+	if err != nil {
+		//fmt.Println("info ERROR", err)
+		panic(err)
+	}
+
+	fileHandle, err := os.Open(filename)
+	defer fileHandle.Close()
+	if err != nil {
+		//fmt.Println("open ERROR", err)
+		panic(err)
+	}
+
+	h := md5.New()
+	_, err = io.Copy(h, fileHandle)
+
+	fileInfo := Header {
+		fName : fi.Name(),
+		fSize : fi.Size(),
+		fPerm : fi.Mode().Perm(),
+		fMtime: fi.ModTime(),
+		fType : fi.IsDir(),
+		fMd5  : fmt.Sprintf("%x", h.Sum(nil)),
+	}
+	return fileInfo
+}
+
+type Header struct{//文件头信息
+	fName       string
+	fSize       int64
+	fMtime      time.Time
+	fPerm       os.FileMode
+	fMd5        string
+	fType       bool
+}
+
+type Body struct{
+	content []byte
+}
+
+type Packet struct{
+	id      int32
+	Header
+	Body
+}
 
 // Source
 type FileSource struct {
@@ -49,16 +111,25 @@ func (self *FileSource) Run() {
 		self.size = n
 		self.reader = bufio.NewReader(f)
 		self.status = RUNNING
-		buf := make([]byte, 10)
+		var count int32 = 0
 		for {
+			buf := make([]byte, 10)
+			count++
 			m, err := self.reader.Read(buf)
 			if err != nil && err != io.EOF {panic(err)}
-			fmt.Println("read m -->", m)
+			//fmt.Println("read m -->", m)
 			if 0 == m {
 				self.output <- nil
 				break
 			} else {
-				self.output <- buf[:m]
+				packet := &Packet{}
+				if count == 1 {//第一个包，发送头信息
+					packet.Header = getFileInfo(self.filename)
+				}
+				packet.id = count
+				packet.Body.content = buf[:m]
+				//fmt.Println("read:", packet)
+				self.output <- packet
 			}
 		}
 		close(self.output)
@@ -90,31 +161,41 @@ func (self *FileSink) Status() int {
 }
 
 func (self *FileSink) Run() {
-
+	var f *os.File
 	go func() {
-		f, err := os.OpenFile("10mb.file.sink", os.O_CREATE|os.O_WRONLY, 0660)
-		defer f.Close()
-		if err != nil {
-			panic(err)
-		}
-
-		self.writer = bufio.NewWriter(f)
 		for {
 			content := <-self.input
-			fmt.Println("sink:", content)
+
 			if content == nil {
 				break
 			} else {//write to file
-				self.writer.Write(content.([]byte))
+				packet := content.(*Packet)
+				//fmt.Println("sink:", packet.Body)
+				if packet.id == 1 {//第一个包，创建文件
+					self.writer,f= createSinkFile(packet.Header.fName+".sink")
+				}
+				self.writer.Write(packet.Body.content)
 			}
 		}
+		self.writer.Flush()
+		f.Close()
 		self.stop <- true
 		close(self.stop)
 	}()
 	self.status = RUNNING
 }
 
-func (self *FileSink) ConnectSink(input chan interface{}) (stop chan bool, err error) {
+func createSinkFile(filename string)( *bufio.Writer ,*os.File){
+	f, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY, 0660)
+	//defer f.Close()
+	if err != nil {
+		panic(err)
+	}
+	writer := bufio.NewWriter(f)
+	return writer,f
+}
+
+func(self *FileSink) ConnectSink(input chan interface{}) (stop chan bool, err error) {
 	self.stop = make(chan bool)
 	self.input = input
 	self.status = READY
@@ -141,7 +222,7 @@ func (p *FilePipe) Run() {
 	go func() {
 		for {
 			stuff, ok := <-p.input
-			fmt.Println("pile:", stuff)
+			//fmt.Println("pile:", stuff)
 			if !ok {
 				break
 			}
@@ -159,11 +240,10 @@ func (p *FilePipe) ConnectPipe(input chan interface{}) (output chan interface{},
 	return p.output, nil
 }
 
-func TestFilePipa(t *testing.T) {
-	Convey("test file pipa", t, func() {
+func TestTextFilePipa(t *testing.T) {
+	Convey("test text file", t, func() {
 			pp := NewPipa()
-
-			source := NewFileSource("/data/go/src/github.com/sumory/pipa/filepipe/10mb.file")
+			source := NewFileSource("test.file")
 			pp.AddSource(source)
 
 			sink := NewFileSink()
@@ -174,14 +254,34 @@ func TestFilePipa(t *testing.T) {
 			stop := pp.Connect() //all 3 parts Connect*
 			pp.Run()             // all 3 parts start
 			<-stop
-
-
+			So("test.file.sink", ShouldEqual, getFileInfo("test.file.sink").fName)
+			So(getFileInfo("test.file").fMd5, ShouldEqual, getFileInfo("test.file.sink").fMd5)
 		})
 }
 
+
+func TestBinaryFilePipa(t *testing.T) {
+	Convey("test binary file", t, func() {
+			pp := NewPipa()
+			source := NewFileSource("10mb.file")
+			pp.AddSource(source)
+
+			sink := NewFileSink()
+			pp.AddSink(sink)
+
+			pp.AddPipe(NewFilePipe())
+
+			stop := pp.Connect() //all 3 parts Connect*
+			pp.Run()             // all 3 parts start
+			<-stop
+			So("10mb.file.sink", ShouldEqual, getFileInfo("10mb.file.sink").fName)
+			So(getFileInfo("10mb.file").fMd5, ShouldEqual, getFileInfo("10mb.file.sink").fMd5)
+		})
+}
+//
 //func TestFileSource(t *testing.T) {
 //	Convey("test file source", t, func() {
-//			source := NewFileSource("/data/go/src/lincell4go/test/test.txt")
+//			source := NewFileSource("/data/go/src/lincell4go/test/test.file")
 //			outchan, err := source.ConnectSource()
 //			if err != nil {
 //				t.Log("connect source error", err)
@@ -191,12 +291,12 @@ func TestFilePipa(t *testing.T) {
 //
 //			result := make([]byte, 1024, 1024)
 //			for e := range outchan {
-//				if e == nil{break}
-//				tmp := e.([]byte)
+//				if e == nil {break}
+//				tmp := e.(*Packet).Body.content
 //				result = append(result, tmp[:]...)
 //
 //			}
 //
-//			t.Log("文件内容为：",string(result))
+//			t.Log("文件内容为：", string(result))
 //		})
 //}

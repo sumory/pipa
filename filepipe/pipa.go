@@ -56,10 +56,10 @@ func (self *Pipa) Run() {
 
 
 func (self *Pipa) Connect() (stop chan bool) {
-	var output chan interface{}
-	output, _ = self.source.ConnectSource()
-	output, _ = self.pipe.ConnectPipe(output)
-	stop, _ = self.sink.ConnectSink(output)
+	var source_output,pipe_output chan interface{}
+	source_output, _ = self.source.ConnectSource()
+	pipe_output, _ = self.pipe.ConnectPipe(source_output)
+	stop, _ = self.sink.ConnectSink(pipe_output)
 	self.status = READY
 	return
 }

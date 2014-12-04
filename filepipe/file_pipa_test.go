@@ -1,15 +1,15 @@
 package filepipe
 
 import (
-	. "github.com/smartystreets/goconvey/convey"
 	"crypto/md5"
 	"io"
 	"os"
 	"bufio"
 	"fmt"
 	"time"
+	"io/ioutil"
 	"testing"
-
+	. "github.com/smartystreets/goconvey/convey"
 )
 
 func IsBigEndian() bool {
@@ -113,7 +113,7 @@ func (self *FileSource) Run() {
 		self.status = RUNNING
 		var count int32 = 0
 		for {
-			buf := make([]byte, 10)
+			buf := make([]byte, 1024)
 			count++
 			m, err := self.reader.Read(buf)
 			if err != nil && err != io.EOF {panic(err)}
@@ -137,7 +137,7 @@ func (self *FileSource) Run() {
 }
 
 func (self *FileSource) ConnectSource() (output chan interface{}, err error) {
-	self.output = make(chan interface{})
+	self.output = make(chan interface{},10)
 	self.status = READY
 	return self.output, nil
 }
@@ -234,10 +234,19 @@ func (p *FilePipe) Run() {
 }
 
 func (p *FilePipe) ConnectPipe(input chan interface{}) (output chan interface{}, err error) {
-	p.output = make(chan interface{})
+	p.output = make(chan interface{}, 10)
 	p.input = input
 	p.status = READY
 	return p.output, nil
+}
+
+func TestGetFileInfo(t *testing.T) {
+	Convey("test GetFileInfo", t, func() {
+			So(func(){getFileInfo("10mb.file.not.exist")}, ShouldPanic )
+			So("f1c9645dbc14efddc7d8a322685f26eb", ShouldEqual, getFileInfo("10mb.file").fMd5)
+			So("10mb.file", ShouldEqual, getFileInfo("10mb.file").fName)
+			So(10485760, ShouldEqual, getFileInfo("10mb.file").fSize)
+		})
 }
 
 func TestTextFilePipa(t *testing.T) {
@@ -260,6 +269,33 @@ func TestTextFilePipa(t *testing.T) {
 }
 
 
+func TestFileSource(t *testing.T) {
+	Convey("test file source", t, func() {
+			source := NewFileSource("test.file")
+			outchan, err := source.ConnectSource()
+			if err != nil {
+				t.Log("connect source error", err)
+			}else {
+				source.Run()
+			}
+
+			var result []byte
+			for e := range outchan {
+				if e == nil {break}
+				tmp := e.(*Packet).Body.content
+				result = append(result, tmp[:]...)
+
+			}
+
+			f,err:=os.OpenFile("test.file", os.O_RDONLY, 0660)
+			defer f.Close()
+			c,err:=ioutil.ReadAll(f)
+			So(string(result),ShouldEqual,string(c))
+			//t.Log("文件内容为：", string(result))
+		})
+}
+
+
 func TestBinaryFilePipa(t *testing.T) {
 	Convey("test binary file", t, func() {
 			pp := NewPipa()
@@ -278,25 +314,4 @@ func TestBinaryFilePipa(t *testing.T) {
 			So(getFileInfo("10mb.file").fMd5, ShouldEqual, getFileInfo("10mb.file.sink").fMd5)
 		})
 }
-//
-//func TestFileSource(t *testing.T) {
-//	Convey("test file source", t, func() {
-//			source := NewFileSource("/data/go/src/lincell4go/test/test.file")
-//			outchan, err := source.ConnectSource()
-//			if err != nil {
-//				t.Log("connect source error", err)
-//			}else {
-//				source.Run()
-//			}
-//
-//			result := make([]byte, 1024, 1024)
-//			for e := range outchan {
-//				if e == nil {break}
-//				tmp := e.(*Packet).Body.content
-//				result = append(result, tmp[:]...)
-//
-//			}
-//
-//			t.Log("文件内容为：", string(result))
-//		})
-//}
+

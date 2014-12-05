@@ -137,7 +137,7 @@ func (self *FileSource) Run() {
 }
 
 func (self *FileSource) ConnectSource() (output chan interface{}, err error) {
-	self.output = make(chan interface{},10)
+	self.output = make(chan interface{}, 10)
 	self.status = READY
 	return self.output, nil
 }
@@ -172,7 +172,7 @@ func (self *FileSink) Run() {
 				packet := content.(*Packet)
 				//fmt.Println("sink:", packet.Body)
 				if packet.id == 1 {//第一个包，创建文件
-					self.writer,f= createSinkFile(packet.Header.fName+".sink")
+					self.writer, f = createSinkFile(packet.Header.fName+".sink")
 				}
 				self.writer.Write(packet.Body.content)
 			}
@@ -185,17 +185,17 @@ func (self *FileSink) Run() {
 	self.status = RUNNING
 }
 
-func createSinkFile(filename string)( *bufio.Writer ,*os.File){
+func createSinkFile(filename string) ( *bufio.Writer , *os.File) {
 	f, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY, 0660)
 	//defer f.Close()
 	if err != nil {
 		panic(err)
 	}
 	writer := bufio.NewWriter(f)
-	return writer,f
+	return writer, f
 }
 
-func(self *FileSink) ConnectSink(input chan interface{}) (stop chan bool, err error) {
+func (self *FileSink) ConnectSink(input chan interface{}) (stop chan bool, err error) {
 	self.stop = make(chan bool)
 	self.input = input
 	self.status = READY
@@ -242,32 +242,12 @@ func (p *FilePipe) ConnectPipe(input chan interface{}) (output chan interface{},
 
 func TestGetFileInfo(t *testing.T) {
 	Convey("test GetFileInfo", t, func() {
-			So(func(){getFileInfo("10mb.file.not.exist")}, ShouldPanic )
+			So(func() {getFileInfo("10mb.file.not.exist")}, ShouldPanic)
 			So("f1c9645dbc14efddc7d8a322685f26eb", ShouldEqual, getFileInfo("10mb.file").fMd5)
 			So("10mb.file", ShouldEqual, getFileInfo("10mb.file").fName)
 			So(10485760, ShouldEqual, getFileInfo("10mb.file").fSize)
 		})
 }
-
-func TestTextFilePipa(t *testing.T) {
-	Convey("test text file", t, func() {
-			pp := NewPipa()
-			source := NewFileSource("test.file")
-			pp.AddSource(source)
-
-			sink := NewFileSink()
-			pp.AddSink(sink)
-
-			pp.AddPipe(NewFilePipe())
-
-			stop := pp.Connect() //all 3 parts Connect*
-			pp.Run()             // all 3 parts start
-			<-stop
-			So("test.file.sink", ShouldEqual, getFileInfo("test.file.sink").fName)
-			So(getFileInfo("test.file").fMd5, ShouldEqual, getFileInfo("test.file.sink").fMd5)
-		})
-}
-
 
 func TestFileSource(t *testing.T) {
 	Convey("test file source", t, func() {
@@ -287,11 +267,31 @@ func TestFileSource(t *testing.T) {
 
 			}
 
-			f,err:=os.OpenFile("test.file", os.O_RDONLY, 0660)
+			f, err := os.OpenFile("test.file", os.O_RDONLY, 0660)
 			defer f.Close()
-			c,err:=ioutil.ReadAll(f)
-			So(string(result),ShouldEqual,string(c))
+			c, err := ioutil.ReadAll(f)
+			So(string(result), ShouldEqual, string(c))
 			//t.Log("文件内容为：", string(result))
+		})
+}
+
+
+func TestTextFilePipa(t *testing.T) {
+	Convey("test text file", t, func() {
+			pp := NewPipa()
+			source := NewFileSource("test.file")
+			pp.AddSource(source)
+
+			sink := NewFileSink()
+			pp.AddSink(sink)
+
+			pp.AddPipe(NewFilePipe())
+
+			stop := pp.Connect() //all 3 parts Connect*
+			pp.Run()             // all 3 parts start
+			<-stop
+			So("test.file.sink", ShouldEqual, getFileInfo("test.file.sink").fName)
+			So(getFileInfo("test.file").fMd5, ShouldEqual, getFileInfo("test.file.sink").fMd5)
 		})
 }
 
@@ -315,3 +315,26 @@ func TestBinaryFilePipa(t *testing.T) {
 		})
 }
 
+func TestManyPipa(t *testing.T) {
+	Convey("test pipe chain", t, func() {
+			pp := NewPipa()
+			source := NewFileSource("test.file")
+			pp.AddSource(source)
+
+			sink := NewFileSink()
+			pp.AddSink(sink)
+
+			pipe1:=NewFilePipe()
+			pipe2:=NewFilePipe()
+
+
+			pp.AddPipe(pipe1)
+			pp.AddPipe(pipe2)
+
+			stop := pp.Connect() //all 3 parts Connect*
+			pp.Run()             // all 3 parts start
+			<-stop
+			So("test.file.sink", ShouldEqual, getFileInfo("test.file.sink").fName)
+			So(getFileInfo("test.file").fMd5, ShouldEqual, getFileInfo("test.file.sink").fMd5)
+		})
+}

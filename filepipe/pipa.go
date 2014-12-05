@@ -35,7 +35,7 @@ Runable
 type Pipa struct{
 	status int
 	source Source
-	pipe  Pipe
+	pipes  []Pipe
 	sink   Sink
 	all    []Runable
 }
@@ -48,20 +48,26 @@ func NewPipa() (pl *Pipa) {
 
 func (self *Pipa) Run() {
 	self.source.Run()
-	self.pipe.Run()
+	for _, p := range self.pipes {
+		p.Run()
+	}
 	self.sink.Run()
 
 	self.status = RUNNING
 }
 
 
-func (self *Pipa) Connect() (stop chan bool) {
-	var source_output,pipe_output chan interface{}
+func (self *Pipa) Connect() (chan bool) {
+	var source_output, pipe_output chan interface{}
 	source_output, _ = self.source.ConnectSource()
-	pipe_output, _ = self.pipe.ConnectPipe(source_output)
-	stop, _ = self.sink.ConnectSink(pipe_output)
+
+	pipe_output = source_output
+	for _, p := range self.pipes {//多管道连接，rafactor later
+		pipe_output, _ = p.ConnectPipe(pipe_output)
+	}
+	stop, _ := self.sink.ConnectSink(pipe_output)
 	self.status = READY
-	return
+	return stop
 }
 
 
@@ -80,15 +86,12 @@ func (self *Pipa) AddSource(src Source) error {
 	return nil
 }
 
-func (self *Pipa) AddPipe(p Pipe) error {
-	if self.status == RUNNING {
-		return errors.New("Abandon 'AddPipe' when RUNNING")
-	}
-	if self.pipe != nil {
-		return errors.New("pipe already added")
-	}
-	self.pipe = p
-	return nil
+func (self *Pipa) AddPipe(p Pipe) (error,*Pipa) {
+	//if self.status == RUNNING {
+		return errors.New("Abandon 'AddPipe' when RUNNING"),nil
+	//}
+	//self.pipes = append(self.pipes, p)
+	//return nil, self
 }
 
 func (self *Pipa) AddSink(sk Sink) error {

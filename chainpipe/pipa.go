@@ -1,4 +1,4 @@
-package pipa
+package chainpipe
 
 import (
 	"errors"
@@ -16,17 +16,17 @@ type Runable interface {
 	Status() int
 }
 
-type Pipe interface {
+type IPipe interface {
 Runable
 	ConnectPipe(input chan interface{}) (output chan interface{}, err error)
 }
 
-type Source interface {
+type ISource interface {
 Runable
 	ConnectSource() (output chan interface{}, err error)
 }
 
-type Sink interface {
+type ISink interface {
 Runable
 	ConnectSink(input chan interface{}) (stop chan bool, err error)
 }
@@ -34,16 +34,16 @@ Runable
 
 type Pipa struct{
 	status int
-	source Source
-	pipes  []Pipe
-	sink   Sink
+	source ISource
+	pipes  []IPipe
+	sink   ISink
 	all    []Runable
 }
 
 func NewPipa() (pl *Pipa) {
 	pl = new(Pipa)
 	pl.status = WAITING
-	pl.pipes = []Pipe{}
+	pl.pipes = []IPipe{}
 	return
 }
 
@@ -79,7 +79,7 @@ func (self *Pipa) Status() int {return self.status}
 
 
 
-func (self *Pipa) AddSource(src Source) error {
+func (self *Pipa) AddSource(src ISource) error {
 	if self.status == RUNNING {
 		return errors.New("Abandon 'AddSource' when RUNNING\n")
 	}
@@ -90,7 +90,7 @@ func (self *Pipa) AddSource(src Source) error {
 	return nil
 }
 
-func (self *Pipa) AddPipe(p Pipe) error {
+func (self *Pipa) AddPipe(p IPipe) error {
 	if self.status == RUNNING {
 		return errors.New("Abandon 'AddPipe' when RUNNING")
 	}
@@ -98,7 +98,7 @@ func (self *Pipa) AddPipe(p Pipe) error {
 	return nil
 }
 
-func (self *Pipa) AddSink(sk Sink) error {
+func (self *Pipa) AddSink(sk ISink) error {
 	if self.status == RUNNING {
 		return errors.New("Abandon 'AddSink' when RUNNING")
 	}
@@ -109,3 +109,33 @@ func (self *Pipa) AddSink(sk Sink) error {
 	return nil
 }
 
+
+func (self *Pipa) Source(src ISource) *Pipa {
+	if self.status == RUNNING {
+		return self
+	}
+	if self.source != nil {
+		return self
+	}
+	self.source = src
+	return self
+}
+
+func (self *Pipa) Pipe(p IPipe) *Pipa {
+	if self.status == RUNNING {
+		return self
+	}
+	self.pipes = append(self.pipes, p)
+	return self
+}
+
+func (self *Pipa) Sink(sk ISink) *Pipa {
+	if self.status == RUNNING {
+		return self
+	}
+	if self.sink != nil {
+		return self
+	}
+	self.sink = sk
+	return self
+}

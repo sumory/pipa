@@ -1,7 +1,7 @@
 package chainpipe
 
 import (
-	"errors"
+	//"errors"
 	//"fmt"
 )
 
@@ -38,6 +38,7 @@ type Pipa struct{
 	pipes  []IPipe
 	sink   ISink
 	all    []Runable
+	stop chan bool
 }
 
 func NewPipa() (pl *Pipa) {
@@ -47,26 +48,26 @@ func NewPipa() (pl *Pipa) {
 	return
 }
 
-func (self *Pipa) Run() {
+func (self *Pipa) Run() chan bool {
 	self.source.Run()
 	for _, p := range self.pipes {
 		p.Run()
 	}
 	self.sink.Run()
-
 	self.status = RUNNING
+	return self.stop
 }
 
 
-func (self *Pipa) Connect() (stop chan bool) {
+func (self *Pipa) Connect() *Pipa  {
 	var output chan interface{}
 	output, _ = self.source.ConnectSource()
 	for _, p := range self.pipes {
 		output, _ = p.ConnectPipe(output)
 	}
-	stop, _ = self.sink.ConnectSink(output)
+	self.stop, _ = self.sink.ConnectSink(output)
 	self.status = READY
-	return
+	return self
 }
 
 
@@ -76,38 +77,6 @@ func (self *Pipa) ConnectPipe(input chan interface{}) (output chan interface{}) 
 }
 
 func (self *Pipa) Status() int {return self.status}
-
-
-
-func (self *Pipa) AddSource(src ISource) error {
-	if self.status == RUNNING {
-		return errors.New("Abandon 'AddSource' when RUNNING\n")
-	}
-	if self.source != nil {
-		return errors.New("source already added")
-	}
-	self.source = src
-	return nil
-}
-
-func (self *Pipa) AddPipe(p IPipe) error {
-	if self.status == RUNNING {
-		return errors.New("Abandon 'AddPipe' when RUNNING")
-	}
-	self.pipes = append(self.pipes, p)
-	return nil
-}
-
-func (self *Pipa) AddSink(sk ISink) error {
-	if self.status == RUNNING {
-		return errors.New("Abandon 'AddSink' when RUNNING")
-	}
-	if self.sink != nil {
-		return errors.New("sink already added")
-	}
-	self.sink = sk
-	return nil
-}
 
 
 func (self *Pipa) Source(src ISource) *Pipa {
@@ -121,11 +90,11 @@ func (self *Pipa) Source(src ISource) *Pipa {
 	return self
 }
 
-func (self *Pipa) Pipe(p IPipe) *Pipa {
+func (self *Pipa) Pipe(p... IPipe) *Pipa {
 	if self.status == RUNNING {
 		return self
 	}
-	self.pipes = append(self.pipes, p)
+	self.pipes = append(self.pipes, p...)
 	return self
 }
 

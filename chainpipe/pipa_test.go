@@ -130,18 +130,16 @@ func TestPipa(t *testing.T) {
 	Convey("test pipa", t, func() {
 			content := "hello pipa!"
 			count := 100
-			pl := NewPipa()
 
+			pl := NewPipa()
 			source := NewSampleSource(content, count)
 			sink := NewSampleSink()
 			pipe1 := NewSamplePipe()
 			pipe2 := NewSamplePipe()
 
-
-			pl.Source(source).Pipe(pipe1).Pipe(pipe2).Sink(sink)
-			stop := pl.Connect()//all 3 parts Connect*
-			pl.Run()// all 3 parts start
-			<-stop
+			//stop := pl.Source(source).Pipe(pipe1).Pipe(pipe2).Sink(sink).Connect().Run()
+			stop := pl.Source(source).Pipe(pipe1,pipe2).Sink(sink).Connect().Run()//all parts Connect and start running
+			<-stop //wait for stop
 
 			So(sink.items, ShouldEqual, count)
 			So(sink.msg, ShouldEqual, content)

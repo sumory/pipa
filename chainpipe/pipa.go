@@ -70,12 +70,6 @@ func (self *Pipa) Connect() *Pipa  {
 	return self
 }
 
-
-func (self *Pipa) ConnectPipe(input chan interface{}) (output chan interface{}) {
-	//implements by subclass
-	return
-}
-
 func (self *Pipa) Status() int {return self.status}
 
 
